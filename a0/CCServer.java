@@ -1,6 +1,9 @@
 import java.io.*;
 import java.net.*;
-import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
 class CCServer {
     public static void main(String args[]) throws Exception {
@@ -33,7 +36,8 @@ class CCServer {
                 in.readFully(inBytes);
 
                 final int[][] edges = parseRequest(new String(inBytes));
-                String response = makeResponse(connectedComponents(edges));
+                UnionFind unionFind = new UnionFind(edges);
+                String response = unionFind.connectedComponents();
                 final byte[] outBytes = response.getBytes("UTF-8");
 
                 DataOutputStream out = new DataOutputStream(client.getOutputStream());
@@ -50,6 +54,10 @@ class CCServer {
         }
     }
 
+    /*
+     * TODO: this adds potentially unnecessary overhead, might wanna just build
+     *       the union find directly from the string instead of creating an array
+     */
     private static int[][] parseRequest(String request) {
         final String[] lines = request.split("\n");
         final int[][] edges = new int[lines.length][2];
@@ -61,18 +69,71 @@ class CCServer {
         return edges;
     }
 
-    private static String makeResponse(int[][] result) {
-        final StringBuilder builder = new StringBuilder();
-        for (int[] pair : result) {
-            builder.append(pair[0]);
-            builder.append(" ");
-            builder.append(pair[1]);
-        }
-        return builder.toString();
-    }
+    private static final class UnionFind {
 
-    private static int[][] connectedComponents(int[][] edges) {
-        // ???
-        return null;
+        // TODO: might want a 2 element array instead of an object
+        private final class Component {
+            int parent;
+            int rank;
+
+            Component(int parent, int rank) {
+                this.parent = parent;
+                this.rank = rank;
+            }
+        }
+
+        private final Map<Integer, Component> components = new HashMap<>();
+        private final Set<Integer> vertices = new HashSet<>();
+
+        UnionFind(int[][] edges) {
+            // TODO might not need to parse into 2d array intermediate form
+            // TODO this is sus
+            for (int[] edge : edges) {
+                vertices.add(edge[0]);
+                vertices.add(edge[1]);
+            }
+            for (int vertex : vertices) {
+                components.put(vertex, new Component(vertex, 0));
+            }
+            // TODO looping through this twice kinda sus
+            for (int[] edge : edges) {
+                union(edge[0], edge[1]);
+            }
+        }
+
+        // TODO memoize this?
+        int find(int i) {
+            if (components.get(i).parent != i) {
+                // Path compression - set this nodes parent to its parents parent
+                components.get(i).parent = find(components.get(i).parent);
+            }
+            return components.get(i).parent;
+        }
+
+        void union(int a, int b) {
+            int rootA = find(a);
+            int rootB = find(b);
+
+            // Union by rank
+            if (components.get(rootA).rank < components.get(rootB).rank) {
+                components.get(rootA).parent = rootB;
+            } else if (components.get(rootA).rank > components.get(rootB).rank) {
+                components.get(rootB).parent = rootA;
+            } else {
+                components.get(rootA).parent = rootB;
+                components.get(rootB).rank++;
+            }
+        }
+
+        String connectedComponents() {
+            StringBuilder builder = new StringBuilder();
+            for (int vertex : vertices) {
+                builder.append(vertex);
+                builder.append(" ");
+                builder.append(find(vertex));
+                builder.append("\n");
+            }
+            return builder.toString();
+        }
     }
 }
