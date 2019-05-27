@@ -4,8 +4,13 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.List;
+import java.util.StringTokenizer;
+import java.util.ArrayList;
+
 
 class CCServer {
+
     public static void main(String args[]) throws Exception {
         if (args.length != 1) {
             System.out.println("usage: java CCServer port");
@@ -19,7 +24,7 @@ class CCServer {
             try {
 		/*
 		  YOUR CODE GOES HERE
-		  - accept connection from server socket
+		  - accept connection from sezrver socket
 		  - read requests from connection repeatedly
 		  - for each request, compute an output and send a response
 		  - each message has a 4-byte header followed by a payload
@@ -29,14 +34,14 @@ class CCServer {
 		    (UTF-8, big-endian)
 		*/
                 Socket client = ssock.accept();
+                System.out.println("connection established!");
 
                 DataInputStream in = new DataInputStream(client.getInputStream());
                 final int size = in.readInt();
                 final byte[] inBytes = new byte[size];
                 in.readFully(inBytes);
 
-                final int[][] edges = parseRequest(new String(inBytes));
-                UnionFind unionFind = new UnionFind(edges);
+                UnionFind unionFind = new UnionFind(inBytes);
                 String response = unionFind.connectedComponents();
                 final byte[] outBytes = response.getBytes("UTF-8");
 
@@ -48,60 +53,50 @@ class CCServer {
                 out.close();
                 in.close();
                 client.close();
+
+                unionFind.components.clear();
             } catch (Exception e) {
                 e.printStackTrace();
             }
         }
+
     }
 
-    /*
-     * TODO: this adds potentially unnecessary overhead, might wanna just build
-     *       the union find directly from the string instead of creating an array
-     */
-    private static int[][] parseRequest(String request) {
-        final String[] lines = request.split("\n");
-        final int[][] edges = new int[lines.length][2];
-        for (int i = 0; i < lines.length; i++) {
-            final String[] edge = lines[i].split(" ");
-            edges[i][0] = Integer.parseInt(edge[0]);
-            edges[i][1] = Integer.parseInt(edge[1]);
+    static  final class Component {
+        int parent;
+        int rank;
+
+        Component(int parent, int rank) {
+            this.parent = parent;
+            this.rank = rank;
         }
-        return edges;
     }
+
 
     private static final class UnionFind {
 
-        // TODO: might want a 2 element array instead of an object
-        private final class Component {
-            int parent;
-            int rank;
-
-            Component(int parent, int rank) {
-                this.parent = parent;
-                this.rank = rank;
-            }
-        }
-
         private final Map<Integer, Component> components = new HashMap<>();
-        private final Set<Integer> vertices = new HashSet<>();
 
-        UnionFind(int[][] edges) {
-            // TODO might not need to parse into 2d array intermediate form
-            // TODO this is sus
-            for (int[] edge : edges) {
-                vertices.add(edge[0]);
-                vertices.add(edge[1]);
-            }
-            for (int vertex : vertices) {
-                components.put(vertex, new Component(vertex, 0));
-            }
-            // TODO looping through this twice kinda sus
-            for (int[] edge : edges) {
-                union(edge[0], edge[1]);
+        UnionFind(byte[] inBytes) {
+            int num1 = 0, num2 = 0;
+            for (byte b : inBytes){
+                if (b == 32){
+                    num2 = num1;
+                    num1 = 0;
+                }
+
+                else if (b == 10){
+                    union(num2, num1);
+                    num2 = 0;
+                    num1 = 0;
+                }
+
+                else{
+                    num1 = (b - 48) + num1*10;
+                }
             }
         }
 
-        // TODO memoize this?
         int find(int i) {
             if (components.get(i).parent != i) {
                 // Path compression - set this nodes parent to its parents parent
@@ -111,6 +106,9 @@ class CCServer {
         }
 
         void union(int a, int b) {
+            components.putIfAbsent(a, new Component(a, 0));
+            components.putIfAbsent(b, new Component(b, 0));
+            
             int rootA = find(a);
             int rootB = find(b);
 
@@ -127,12 +125,13 @@ class CCServer {
 
         String connectedComponents() {
             StringBuilder builder = new StringBuilder();
-            for (int vertex : vertices) {
-                builder.append(vertex);
+            for(Integer keyVal : components.keySet()) {
+                builder.append(keyVal);
                 builder.append(" ");
-                builder.append(find(vertex));
+                builder.append(find(keyVal));
                 builder.append("\n");
             }
+
             return builder.toString();
         }
     }
