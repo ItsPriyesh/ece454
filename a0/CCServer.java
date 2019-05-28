@@ -34,15 +34,14 @@ class CCServer {
 		    (UTF-8, big-endian)
 		*/
                 Socket client = ssock.accept();
-                System.out.println("connection established!");
 
                 DataInputStream in = new DataInputStream(client.getInputStream());
                 final int size = in.readInt();
                 final byte[] inBytes = new byte[size];
                 in.readFully(inBytes);
 
-                UnionFind unionFind = new UnionFind(inBytes);
-                String response = unionFind.connectedComponents();
+                initUnionFind(inBytes);
+                String response = connectedComponents();
                 final byte[] outBytes = response.getBytes("UTF-8");
 
                 DataOutputStream out = new DataOutputStream(client.getOutputStream());
@@ -54,7 +53,6 @@ class CCServer {
                 in.close();
                 client.close();
 
-                unionFind.components.clear();
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -73,66 +71,63 @@ class CCServer {
     }
 
 
-    private static final class UnionFind {
+    private static final Map<Integer, Component> components = new HashMap<>();
 
-        private final Map<Integer, Component> components = new HashMap<>();
-
-        UnionFind(byte[] inBytes) {
-            int num1 = 0, num2 = 0;
-            for (byte b : inBytes){
-                if (b == 32){
-                    num2 = num1;
-                    num1 = 0;
-                }
-
-                else if (b == 10){
-                    union(num2, num1);
-                    num2 = 0;
-                    num1 = 0;
-                }
-
-                else{
-                    num1 = (b - 48) + num1*10;
-                }
-            }
-        }
-
-        int find(int i) {
-            if (components.get(i).parent != i) {
-                // Path compression - set this nodes parent to its parents parent
-                components.get(i).parent = find(components.get(i).parent);
-            }
-            return components.get(i).parent;
-        }
-
-        void union(int a, int b) {
-            components.putIfAbsent(a, new Component(a, 0));
-            components.putIfAbsent(b, new Component(b, 0));
-            
-            int rootA = find(a);
-            int rootB = find(b);
-
-            // Union by rank
-            if (components.get(rootA).rank < components.get(rootB).rank) {
-                components.get(rootA).parent = rootB;
-            } else if (components.get(rootA).rank > components.get(rootB).rank) {
-                components.get(rootB).parent = rootA;
-            } else {
-                components.get(rootA).parent = rootB;
-                components.get(rootB).rank++;
-            }
-        }
-
-        String connectedComponents() {
-            StringBuilder builder = new StringBuilder();
-            for(Integer keyVal : components.keySet()) {
-                builder.append(keyVal);
-                builder.append(" ");
-                builder.append(find(keyVal));
-                builder.append("\n");
+    static void initUnionFind(byte[] inBytes) {
+        components.clear();
+        int num1 = 0, num2 = 0;
+        for (byte b : inBytes){
+            if (b == 32){
+                num2 = num1;
+                num1 = 0;
             }
 
-            return builder.toString();
+            else if (b == 10){
+                union(num2, num1);
+                num2 = 0;
+                num1 = 0;
+            }
+
+            else{
+                num1 = (b - 48) + num1*10;
+            }
         }
+    }
+
+    static int find(int i) {
+        if (components.get(i).parent != i) {
+            // Path compression - set this nodes parent to its parents parent
+            components.get(i).parent = find(components.get(i).parent);
+        }
+        return components.get(i).parent;
+    }
+
+    static void union(int a, int b) {
+        components.putIfAbsent(a, new Component(a, 0));
+        components.putIfAbsent(b, new Component(b, 0));
+
+        int rootA = find(a);
+        int rootB = find(b);
+
+        // Union by rank
+        if (components.get(rootA).rank < components.get(rootB).rank) {
+            components.get(rootA).parent = rootB;
+        } else if (components.get(rootA).rank > components.get(rootB).rank) {
+            components.get(rootB).parent = rootA;
+        } else {
+            components.get(rootA).parent = rootB;
+            components.get(rootB).rank++;
+        }
+    }
+
+    static String connectedComponents() {
+        StringBuilder builder = new StringBuilder();
+        for (int key : components.keySet()) {
+            builder.append(key);
+            builder.append(" ");
+            builder.append(find(key));
+            builder.append("\n");
+        }
+        return builder.toString();
     }
 }

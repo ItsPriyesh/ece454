@@ -2,4 +2,5 @@
 out/
 .DS_Store
 *.class
+huge.txt
 
