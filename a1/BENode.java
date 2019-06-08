@@ -5,9 +5,12 @@ import org.apache.log4j.Logger;
 
 import org.apache.thrift.TProcessorFactory;
 import org.apache.thrift.protocol.TBinaryProtocol;
+import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.server.TSimpleServer;
 import org.apache.thrift.transport.TServerSocket;
 import org.apache.thrift.transport.TFramedTransport;
+import org.apache.thrift.transport.TSocket;
+import org.apache.thrift.transport.TTransport;
 
 
 public class BENode {
@@ -19,16 +22,27 @@ public class BENode {
             System.exit(-1);
         }
 
+        String hostFE = args[0];
+        int portFE = Integer.parseInt(args[1]);
+
         // initialize log4j
         BasicConfigurator.configure();
         log = Logger.getLogger(BENode.class.getName());
 
-        String hostFE = args[0];
-        int portFE = Integer.parseInt(args[1]);
-        int portBE = Integer.parseInt(args[2]);
-        log.info("Launching BE node on port " + portBE + " at host " + getHostName());
+        // create client to front end
+        TSocket sock = new TSocket(hostFE, portFE);
+        TTransport transport = new TFramedTransport(sock);
+        TProtocol protocol = new TBinaryProtocol(transport);
+        BcryptService.Client feClient = new BcryptService.Client(protocol);
+
+
+        // Continuously ping the front-end to notify of this backend nodes existence
+        BEHeartbeat heartBeat = new BEHeartbeat(getHostName(), args[2], transport, feClient);
+        heartBeat.start();
 
         // launch Thrift server
+        int portBE = Integer.parseInt(args[2]);
+        log.info("Launching BE node on port " + portBE + " at host " + getHostName());
         BcryptService.Processor processor = new BcryptService.Processor<BcryptService.Iface>(new BcryptServiceHandler());
         TServerSocket socket = new TServerSocket(portBE);
         TSimpleServer.Args sargs = new TSimpleServer.Args(socket);
@@ -40,7 +54,11 @@ public class BENode {
         server.serve();
     }
 
-    static String getHostName() {
+    private static void print(String s) {
+        System.out.println(Thread.currentThread().getName() + ": " + s);
+    }
+
+    private static String getHostName() {
         try {
             return InetAddress.getLocalHost().getHostName();
         } catch (Exception e) {
