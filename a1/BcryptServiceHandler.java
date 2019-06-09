@@ -37,12 +37,6 @@ public class BcryptServiceHandler implements BcryptService.Iface {
 
     @Override
     public List<String> hashPassword(List<String> password, short logRounds) throws IllegalArgument, org.apache.thrift.TException {
-        if (password.isEmpty()) {
-            throw new IllegalArgument("Password list is empty!");
-        } else if (logRounds < 4 || logRounds > 30) {
-            throw new IllegalArgument("Log rounds out of range! Must be within [4, 30]");
-        }
-
         if (isBackEnd) {
             // Backend Worker node:
             // - Update timestamp of last received batch (to know if FE is still alive)
@@ -51,13 +45,18 @@ public class BcryptServiceHandler implements BcryptService.Iface {
             //   - Split up batch and distribute the list of passwords amongst the threads
             //  - if passwords.size == 1, just run hashing sequentially
             // - Return result
+            if (password.isEmpty()) {
+                throw new IllegalArgument("Password list is empty!");
+            } else if (logRounds < 4 || logRounds > 30) {
+                throw new IllegalArgument("Log rounds out of range! Must be within [4, 30]");
+            }
 
             try {
-
+                // TODO: multithread this by breaking up the passwords list
+                return performHashPassword(password, logRounds);
             } catch (Exception e) {
                 throw new IllegalArgument(e.getMessage());
             }
-            return Collections.emptyList();
 
         } else {
             // Front-end node: must try to find a backend node to send workload to
@@ -70,23 +69,34 @@ public class BcryptServiceHandler implements BcryptService.Iface {
             // - If no available backends, run bcryptHashPasswords here on the FE
             //   - Return result
             FEWorkerManager.WorkerMetadata workerBE = FEWorkerManager.findAvailableWorker();
-            TTransport transportToBE = workerBE.getTransport();
-            BcryptService.Client clientToBE = workerBE.getClient();
-            try {
-                transportToBE.open();
-                // TODO: mark worker as occupied and set its load
-                List<String> hashes = clientToBE.hashPassword(password, logRounds);
-                // TODO: mark worker as unoccupied and decrease its load
-                return hashes;
-            } catch (Exception e) {
-
-            } finally {
-                if (transportToBE.isOpen()) {
-                    transportToBE.close();
+            while (workerBE != null) {
+                // Found a worker! Sending workload to BE
+                TTransport transportToBE = workerBE.getTransport();
+                BcryptService.Client clientToBE = workerBE.getClient();
+                try {
+                    transportToBE.open();
+                    workerBE.setBusy(true);
+                    List<String> hashes = clientToBE.hashPassword(password, logRounds);
+                    workerBE.setBusy(false);
+                    return hashes;
+                } catch (Exception e) {
+                    // The chosen workerBE failed to hashPasswords (might be down)
+                    // remove it from our pool of workers and try to find another worker
+                    FEWorkerManager.removeWorker(workerBE);
+                    workerBE = FEWorkerManager.findAvailableWorker();
+                } finally {
+                    if (transportToBE.isOpen()) {
+                        transportToBE.close();
+                    }
                 }
             }
 
-            return Collections.emptyList();
+            // No workers available! Perform the hashing here on the FE
+            try {
+                return performHashPassword(password, logRounds);
+            } catch (Exception e) {
+                throw new IllegalArgument(e.getMessage());
+            }
         }
 
     }
@@ -103,11 +113,13 @@ public class BcryptServiceHandler implements BcryptService.Iface {
         } else {
 
         }
+        return Collections.emptyList();
     }
 
     @Override
     public void ping(String host, String port) throws IllegalArgument, TException {
         // Front end received ping from backend @host:port
+        System.out.println("Received ping from " + host + ":" + port);
         FEWorkerManager.addWorker(host, port);
     }
 }

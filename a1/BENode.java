@@ -7,6 +7,7 @@ import org.apache.thrift.TProcessorFactory;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.server.TSimpleServer;
+import org.apache.thrift.server.TThreadPoolServer;
 import org.apache.thrift.transport.TServerSocket;
 import org.apache.thrift.transport.TFramedTransport;
 import org.apache.thrift.transport.TSocket;
@@ -45,12 +46,13 @@ public class BENode {
         log.info("Launching BE node on port " + portBE + " at host " + getHostName());
         BcryptService.Processor processor = new BcryptService.Processor<BcryptService.Iface>(new BcryptServiceHandler());
         TServerSocket socket = new TServerSocket(portBE);
-        TSimpleServer.Args sargs = new TSimpleServer.Args(socket);
+        TThreadPoolServer.Args sargs = new TThreadPoolServer.Args(socket);
         sargs.protocolFactory(new TBinaryProtocol.Factory());
         sargs.transportFactory(new TFramedTransport.Factory());
         sargs.processorFactory(new TProcessorFactory(processor));
-        //sargs.maxWorkerThreads(64);
-        TSimpleServer server = new TSimpleServer(sargs);
+        sargs.maxWorkerThreads(64);
+        // TThreadPoolServer creates uses a different thread for each client connection (from a fixed pool of threads)
+        TThreadPoolServer server = new TThreadPoolServer(sargs);
         server.serve();
     }
 
