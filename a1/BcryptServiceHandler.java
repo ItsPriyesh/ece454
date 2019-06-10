@@ -64,11 +64,15 @@ public class BcryptServiceHandler implements BcryptService.Iface {
             TTransport transportToBE = workerBE.getTransport();
             BcryptService.Client clientToBE = workerBE.getClient();
             try {
+                final int workload = (int) (passwords.size() * Math.pow(2, logRounds));
                 transportToBE.open();
+
                 workerBE.setBusy(true);
+                workerBE.incrementLoad(workload);
                 List<String> hashes = clientToBE.hashPassword(passwords, logRounds);
-                System.out.println("Worker replied with hashes" + hashes);
+                workerBE.decrementLoad(workload);
                 workerBE.setBusy(false);
+                System.out.println("Worker replied with hashes" + hashes);
                 return hashes;
             } catch (Exception e) {
                 // The chosen workerBE failed to hashPasswords (might be down)
@@ -155,10 +159,15 @@ public class BcryptServiceHandler implements BcryptService.Iface {
             BcryptService.Client clientToBE = workerBE.getClient();
             try {
                 transportToBE.open();
+                final int workload = password.size();
+
                 workerBE.setBusy(true);
+                workerBE.incrementLoad(workload);
                 List<Boolean> checks = clientToBE.checkPassword(password, hash);
-                System.out.println("Worker replied with checks" + checks);
+                workerBE.decrementLoad(workload);
                 workerBE.setBusy(false);
+
+                System.out.println("Worker replied with checks" + checks);
                 return checks;
             } catch (Exception e) {
                 // The chosen workerBE failed to hashPasswords (might be down)
