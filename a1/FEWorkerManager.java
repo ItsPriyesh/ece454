@@ -1,3 +1,5 @@
+import com.google.common.collect.Iterables;
+import org.apache.thrift.Option;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.transport.TFramedTransport;
 import org.apache.thrift.transport.TSocket;
@@ -7,6 +9,7 @@ import java.time.Duration;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class FEWorkerManager {
@@ -80,6 +83,8 @@ public class FEWorkerManager {
     static void addWorker(String host, String port) {
         final String key = host + port;
         final long timestamp = System.currentTimeMillis();
+        // If we don't already know the worker, save it in our pool
+        // Otherwise update the timestamp of the workers last heartbeat
         if (!workers.containsKey(key)) {
             workers.put(key, new WorkerMetadata(host, port, timestamp));
         } else {
@@ -96,34 +101,38 @@ public class FEWorkerManager {
         if (workers.isEmpty()) return null;
 
         System.out.println("Finding available worker from : " + workers);
+        WorkerMetadata worker = null;
 
         // Return the first worker that's not busy
-        for (WorkerMetadata worker : workers.values()) {
-            if (!worker.isBusy() && worker.hasPulse()) {
-                return worker;
-            }
+        worker = workers.values()
+                .stream()
+                .filter(w -> !w.isBusy() && w.hasPulse())
+                .findFirst()
+                .orElse(null);
+
+        if (worker != null) {
+            return worker;
         }
 
         if (workers.isEmpty()) return null;
 
         // All workers are busy! Pick the one with the least load
-        WorkerMetadata worker = Collections.min(workers.values(),
-                Comparator.comparingInt(WorkerMetadata::getLoad));
+        worker = workers.values()
+                .stream()
+                .min(Comparator.comparingInt(WorkerMetadata::getLoad))
+                .orElse(null);
 
-        // Re-create a new client connection to the BE (will spawn another thread on the least loaded BE)
-        worker.buildClientConnection();
+        if (worker != null) {
+            // Re-create a new client connection to the BE (will spawn another thread on the least loaded BE)
+            worker.buildClientConnection();
+        }
 
         return worker;
     }
 
-    // Call this when we havent received a ping from a BENode in a while
     static void removeWorker(WorkerMetadata worker) {
         final String key = worker.host + worker.port;
         workers.remove(key);
     }
 
-    static boolean hasWorker(String host, String port) {
-        final String key = host + port;
-        return workers.containsKey(key);
-    }
 }

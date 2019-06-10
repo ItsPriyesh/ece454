@@ -50,7 +50,7 @@ public class BENode {
         sargs.protocolFactory(new TBinaryProtocol.Factory());
         sargs.transportFactory(new TFramedTransport.Factory());
         sargs.processorFactory(new TProcessorFactory(processor));
-//        sargs.maxWorkerThreads(64);
+        // sargs.maxWorkerThreads(64);
         // TThreadPoolServer creates uses a different thread for each client connection (from a fixed pool of threads)
         // Using TThreadPoolServer is throwing this ERROR org.apache.thrift.server.TThreadPoolServer  - Thrift error occurred during processing of message.
         //org.apache.thrift.transport.TTransportException

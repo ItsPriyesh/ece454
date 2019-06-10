@@ -36,6 +36,62 @@ public class BcryptServiceHandler implements BcryptService.Iface {
     }
 
 
+    private static List<String> hashPasswordBE(List<String> passwords, short logRounds) throws IllegalArgument, org.apache.thrift.TException {
+        try {
+            System.out.println("BE: hashing passwords " + passwords.size());
+            // TODO: multithread this by breaking up the passwords list
+            List<String> res = performHashPassword(passwords, logRounds);
+            System.out.println("BE: finished hashing");
+            return res;
+
+        } catch (Exception e) {
+            System.out.println("BE: hashing password failed!");
+            throw new IllegalArgument(e.getMessage());
+        }
+    }
+
+    private static List<String> hashPasswordFE(List<String> passwords, short logRounds) throws IllegalArgument, org.apache.thrift.TException {
+        if (passwords.isEmpty()) {
+            throw new IllegalArgument("Password list is empty!");
+        } else if (logRounds < 4 || logRounds > 30) {
+            throw new IllegalArgument("Log rounds out of range! Must be within [4, 30]");
+        }
+
+        FEWorkerManager.WorkerMetadata workerBE = FEWorkerManager.findAvailableWorker();
+        System.out.println("Found worker " + workerBE);
+        while (workerBE != null) {
+            // Found a worker! Sending workload to BE
+            TTransport transportToBE = workerBE.getTransport();
+            BcryptService.Client clientToBE = workerBE.getClient();
+            try {
+                transportToBE.open();
+                workerBE.setBusy(true);
+                List<String> hashes = clientToBE.hashPassword(passwords, logRounds);
+                System.out.println("Worker replied with hashes" + hashes);
+                workerBE.setBusy(false);
+                return hashes;
+            } catch (Exception e) {
+                // The chosen workerBE failed to hashPasswords (might be down)
+                // remove it from our pool of workers and try to find another worker
+                System.out.println("Worker failed: " + e.getMessage());
+                FEWorkerManager.removeWorker(workerBE);
+                workerBE = FEWorkerManager.findAvailableWorker();
+            } finally {
+                if (transportToBE.isOpen()) {
+                    transportToBE.close();
+                }
+            }
+        }
+
+        System.out.println("no workers");
+        // No workers available! Perform the hashing here on the FE
+        try {
+            return performHashPassword(passwords, logRounds);
+        } catch (Exception e) {
+            throw new IllegalArgument(e.getMessage());
+        }
+    }
+
     @Override
     public List<String> hashPassword(List<String> password, short logRounds) throws IllegalArgument, org.apache.thrift.TException {
         if (isBackEnd) {
@@ -46,23 +102,18 @@ public class BcryptServiceHandler implements BcryptService.Iface {
             //   - Split up batch and distribute the list of passwords amongst the threads
             //  - if passwords.size == 1, just run hashing sequentially
             // - Return result
-            if (password.isEmpty()) {
-                throw new IllegalArgument("Password list is empty!");
-            } else if (logRounds < 4 || logRounds > 30) {
-                throw new IllegalArgument("Log rounds out of range! Must be within [4, 30]");
-            }
-
-            try {
-                System.out.println("BE: hashing password");
-                // TODO: multithread this by breaking up the passwords list
-                List<String> res = performHashPassword(password, logRounds);
-                System.out.println("BE: finished hashing");
-                return res;
-
-            } catch (Exception e) {
-                System.out.println("BE: hashing password failed!");
-                throw new IllegalArgument(e.getMessage());
-            }
+            return hashPasswordBE(password, logRounds);
+//            try {
+//                System.out.println("BE: hashing password");
+//                // TODO: multithread this by breaking up the passwords list
+//                List<String> res = performHashPassword(password, logRounds);
+//                System.out.println("BE: finished hashing");
+//                return res;
+//
+//            } catch (Exception e) {
+//                System.out.println("BE: hashing password failed!");
+//                throw new IllegalArgument(e.getMessage());
+//            }
 
         } else {
             // Front-end node: must try to find a backend node to send workload to
@@ -74,88 +125,69 @@ public class BcryptServiceHandler implements BcryptService.Iface {
             //   - Return result
             // - If no available backends, run bcryptHashPasswords here on the FE
             //   - Return result
-            FEWorkerManager.WorkerMetadata workerBE = FEWorkerManager.findAvailableWorker();
-            System.out.println("Found worker " + workerBE);
-            while (workerBE != null) {
-                // Found a worker! Sending workload to BE
-                TTransport transportToBE = workerBE.getTransport();
-                BcryptService.Client clientToBE = workerBE.getClient();
-                try {
-                    transportToBE.open();
-                    workerBE.setBusy(true);
-                    List<String> hashes = clientToBE.hashPassword(password, logRounds);
-                    System.out.println("Worker replied with " + hashes);
-                    workerBE.setBusy(false);
-                    return hashes;
-                } catch (Exception e) {
-                    // The chosen workerBE failed to hashPasswords (might be down)
-                    // remove it from our pool of workers and try to find another worker
-                    FEWorkerManager.removeWorker(workerBE);
-                    workerBE = FEWorkerManager.findAvailableWorker();
-                } finally {
-                    if (transportToBE.isOpen()) {
-                        transportToBE.close();
-                    }
-                }
-            }
+            return hashPasswordFE(password, logRounds);
+        }
+    }
 
-            System.out.println("no workers");
-            // No workers available! Perform the hashing here on the FE
+    private List<Boolean> checkPasswordBE(List<String> password, List<String> hash) throws IllegalArgument, org.apache.thrift.TException {
+        // Params have been error checked at this point
+        try {
+            // TODO: multithread this by breaking up the passwords list
+            return performCheckPassword(password, hash);
+        } catch (Exception e) {
+            throw new IllegalArgument(e.getMessage());
+        }
+    }
+
+
+    private List<Boolean> checkPasswordFE(List<String> password, List<String> hash) throws IllegalArgument, org.apache.thrift.TException {
+        // Error checking at FE (throw error at client):
+        if (password.isEmpty() || hash.isEmpty()) {
+            throw new IllegalArgument("Password or hash list is empty!");
+        } else if (password.size() != hash.size()) {
+            throw new IllegalArgument("Password and hash lists have unequal length!");
+        }
+
+        FEWorkerManager.WorkerMetadata workerBE = FEWorkerManager.findAvailableWorker();
+        while (workerBE != null) {
+            // Found a worker! Sending workload to BE
+            TTransport transportToBE = workerBE.getTransport();
+            BcryptService.Client clientToBE = workerBE.getClient();
             try {
-                return performHashPassword(password, logRounds);
+                transportToBE.open();
+                workerBE.setBusy(true);
+                List<Boolean> checks = clientToBE.checkPassword(password, hash);
+                System.out.println("Worker replied with checks" + checks);
+                workerBE.setBusy(false);
+                return checks;
             } catch (Exception e) {
-                throw new IllegalArgument(e.getMessage());
+                // The chosen workerBE failed to hashPasswords (might be down)
+                // remove it from our pool of workers and try to find another worker
+                System.out.println("Worker failed: " + e.getMessage());
+                FEWorkerManager.removeWorker(workerBE);
+                workerBE = FEWorkerManager.findAvailableWorker();
+            } finally {
+                if (transportToBE.isOpen()) {
+                    transportToBE.close();
+                }
             }
         }
 
+        // No workers available! Perform the hashing here on the FE
+        try {
+            return performCheckPassword(password, hash);
+        } catch (Exception e) {
+            throw new IllegalArgument(e.getMessage());
+        }
     }
 
     @Override
     public List<Boolean> checkPassword(List<String> password, List<String> hash) throws IllegalArgument, org.apache.thrift.TException {
         if (isBackEnd) {
-            if (password.isEmpty() || hash.isEmpty()) {
-                throw new IllegalArgument("Password or hash list is empty!");
-            } else if (password.size() != hash.size()) {
-                throw new IllegalArgument("Password and hash lists have unequal length!");
-            }
-
-            try {
-                // TODO: multithread this by breaking up the passwords list
-                return performCheckPassword(password, hash);
-            } catch (Exception e) {
-                throw new IllegalArgument(e.getMessage());
-            }
+            return checkPasswordBE(password, hash);
         } else {
             // Its the FE
-            FEWorkerManager.WorkerMetadata workerBE = FEWorkerManager.findAvailableWorker();
-            while (workerBE != null) {
-                // Found a worker! Sending workload to BE
-                TTransport transportToBE = workerBE.getTransport();
-                BcryptService.Client clientToBE = workerBE.getClient();
-                try {
-                    transportToBE.open();
-                    workerBE.setBusy(true);
-                    List<Boolean> checks = clientToBE.checkPassword(password, hash);
-                    workerBE.setBusy(false);
-                    return checks;
-                } catch (Exception e) {
-                    // The chosen workerBE failed to hashPasswords (might be down)
-                    // remove it from our pool of workers and try to find another worker
-                    FEWorkerManager.removeWorker(workerBE);
-                    workerBE = FEWorkerManager.findAvailableWorker();
-                } finally {
-                    if (transportToBE.isOpen()) {
-                        transportToBE.close();
-                    }
-                }
-            }
-
-            // No workers available! Perform the hashing here on the FE
-            try {
-                return performCheckPassword(password, hash);
-            } catch (Exception e) {
-                throw new IllegalArgument(e.getMessage());
-            }
+            return checkPasswordFE(password, hash);
         }
     }
 
