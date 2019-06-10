@@ -1,8 +1,6 @@
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
-import com.sun.org.apache.xpath.internal.operations.Bool;
 import org.apache.thrift.TException;
 import org.apache.thrift.transport.TTransport;
 import org.mindrot.jbcrypt.BCrypt;
@@ -11,11 +9,11 @@ public class BcryptServiceHandler implements BcryptService.Iface {
 
     private final boolean isBackEnd;
 
-    public BcryptServiceHandler() {
+    BcryptServiceHandler() {
         this(false);
     }
 
-    public BcryptServiceHandler(boolean isFrontEnd) {
+    BcryptServiceHandler(boolean isFrontEnd) {
         isBackEnd = !isFrontEnd;
     }
 

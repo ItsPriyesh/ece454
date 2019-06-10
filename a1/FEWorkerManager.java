@@ -1,11 +1,8 @@
-import com.google.common.collect.Iterables;
-import org.apache.thrift.Option;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.transport.TFramedTransport;
 import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
 
-import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.util.*;
@@ -29,36 +26,36 @@ public class FEWorkerManager {
             buildClientConnection();
         }
 
-        public boolean isBusy() {
+        boolean isBusy() {
             return busy;
         }
 
-        public void buildClientConnection() {
+        void buildClientConnection() {
             transport = new TFramedTransport(new TSocket(host, Integer.parseInt(port)));
             client = new BcryptService.Client(new TBinaryProtocol(transport));
         }
 
-        public TTransport getTransport() {
+        TTransport getTransport() {
             return transport;
         }
 
-        public BcryptService.Client getClient() {
+        BcryptService.Client getClient() {
             return client;
         }
 
-        public void setBusy(boolean busy) {
+        void setBusy(boolean busy) {
             this.busy = busy;
         }
 
-        public int getLoad() {
+        int getLoad() {
             return load;
         }
 
-        public void incrementLoad(int load) {
+        void incrementLoad(int load) {
             this.load += load;
         }
 
-        public void decrementLoad(int load) {
+        void decrementLoad(int load) {
             this.load -= load;
         }
 
@@ -66,7 +63,7 @@ public class FEWorkerManager {
          * BENode should send a heartbeat ping every 3 seconds, so we'll say its dead
          * if we haven't received anything in over 5 seconds
          */
-        public boolean hasPulse() {
+        boolean hasPulse() {
             return System.currentTimeMillis() - lastHeartbeatTime < Duration.ofSeconds(5).toMillis();
         }
 
