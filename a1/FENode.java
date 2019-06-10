@@ -3,7 +3,11 @@ import org.apache.log4j.Logger;
 
 import org.apache.thrift.TProcessorFactory;
 import org.apache.thrift.protocol.TBinaryProtocol;
+import org.apache.thrift.server.THsHaServer;
+import org.apache.thrift.server.TNonblockingServer;
 import org.apache.thrift.server.TSimpleServer;
+import org.apache.thrift.transport.TNonblockingServerSocket;
+import org.apache.thrift.transport.TNonblockingServerTransport;
 import org.apache.thrift.transport.TServerSocket;
 import org.apache.thrift.transport.TFramedTransport;
 
@@ -26,12 +30,16 @@ public class FENode {
 
         // launch Thrift server
         BcryptService.Processor processor = new BcryptService.Processor<BcryptService.Iface>(new BcryptServiceHandler(true));
-        TServerSocket socket = new TServerSocket(portFE);
-        TSimpleServer.Args sargs = new TSimpleServer.Args(socket);
+        TNonblockingServerTransport socket = new TNonblockingServerSocket(portFE);
+        THsHaServer.Args sargs = new THsHaServer.Args(socket);
         sargs.protocolFactory(new TBinaryProtocol.Factory());
         sargs.transportFactory(new TFramedTransport.Factory());
         sargs.processorFactory(new TProcessorFactory(processor));
-        TSimpleServer server = new TSimpleServer(sargs);
+        THsHaServer server = new THsHaServer(sargs);
         server.serve();
     }
+
+    // TODO Server types?
+    // FE should probably be
+    // BE should probably be a thread pool server
 }

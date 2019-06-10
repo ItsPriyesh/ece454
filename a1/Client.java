@@ -49,12 +49,12 @@ public class Client {
         }
     }
 
-    static int numThreads = 1;
-    static int requestsPerThread = 5;
+    static int numThreads = 2;
+    static int requestsPerThread = 1;
 
     static int passwordLength = 100;
-    static int passwordsPerBatch = 100;
-    static short logRounds = 10;
+    static int passwordsPerRequest = 16;
+    static short logRounds = 12;
 
     public static void runMulithreadedClient(String[] args) throws InterruptedException {
 
@@ -107,8 +107,8 @@ public class Client {
             this.host = host;
             this.port = port;
 
-            passwords = new ArrayList<>(passwordsPerBatch);
-            for (int j = 0; j < passwordsPerBatch; j++) {
+            passwords = new ArrayList<>(passwordsPerRequest);
+            for (int j = 0; j < passwordsPerRequest; j++) {
                 passwords.add(randomStringOfLength(passwordLength));
             }
         }

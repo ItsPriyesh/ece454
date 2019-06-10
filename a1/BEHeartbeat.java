@@ -8,8 +8,8 @@ public class BEHeartbeat {
 
     private static final int PING_PERIOD_SECONDS = 3;
 
-    private final ScheduledExecutorService pingExecutor = Executors.newSingleThreadScheduledExecutor();
     private final Runnable ping;
+    private final ScheduledExecutorService pingExecutor = Executors.newSingleThreadScheduledExecutor();
 
     BEHeartbeat(String host, String port, TTransport transport, BcryptService.Client client) {
         ping = () -> {

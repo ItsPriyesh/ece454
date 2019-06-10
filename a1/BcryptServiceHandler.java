@@ -58,7 +58,7 @@ public class BcryptServiceHandler implements BcryptService.Iface {
         }
 
         FEWorkerManager.WorkerMetadata workerBE = FEWorkerManager.findAvailableWorker();
-        System.out.println("Found worker " + workerBE);
+        System.out.println(Thread.currentThread().getName() + "FOUND WORKER: " + workerBE);
         while (workerBE != null) {
             // Found a worker! Sending workload to BE
             TTransport transportToBE = workerBE.getTransport();
@@ -87,7 +87,7 @@ public class BcryptServiceHandler implements BcryptService.Iface {
             }
         }
 
-        System.out.println("no workers");
+        System.out.println("No BE workers available! Performing locally");
         // No workers available! Perform the hashing here on the FE
         try {
             return performHashPassword(passwords, logRounds);

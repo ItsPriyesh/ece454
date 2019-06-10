@@ -5,11 +5,10 @@ import org.apache.thrift.transport.TFramedTransport;
 import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
 
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.time.Duration;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class FEWorkerManager {
@@ -73,8 +72,10 @@ public class FEWorkerManager {
 
         @Override
         public String toString() {
-            return String.format("@%s:%s; busy=%s, load=%s, lastHeartbeat=%s",
-                    host, port, busy, load, lastHeartbeatTime);
+            return String.format("Worker(@%s:%s; busy=%s, load=%s, lastHeartbeat=%s)",
+                    host, port, busy, load,
+                    new SimpleDateFormat("HH:mm:ss").format(new Date(lastHeartbeatTime))
+            );
         }
     }
 
@@ -90,6 +91,7 @@ public class FEWorkerManager {
         } else {
             workers.get(key).lastHeartbeatTime = timestamp;
         }
+        System.out.printf("Current worker pool (%s): %s\n", workers.size(), workers.values());
     }
 
 
@@ -97,11 +99,13 @@ public class FEWorkerManager {
      * Note: workers send a heart beat every 3 seconds to indicate they're alive.
      *       A worker returned by this method could potentially be down by the time it is accessed.
      */
-    static WorkerMetadata findAvailableWorker() {
+    static synchronized WorkerMetadata findAvailableWorker() {
+        // TODO : this is getting called by 2 threads on the FE node at once and they both return the same backend node
         if (workers.isEmpty()) return null;
 
-        System.out.println("Finding available worker from : " + workers);
-        WorkerMetadata worker = null;
+        System.out.println("Finding available worker from : " + workers.values());
+
+        WorkerMetadata worker;
 
         // Return the first worker that's not busy
         worker = workers.values()
@@ -111,6 +115,7 @@ public class FEWorkerManager {
                 .orElse(null);
 
         if (worker != null) {
+            worker.setBusy(true);
             return worker;
         }
 
