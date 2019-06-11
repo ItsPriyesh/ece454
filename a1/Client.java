@@ -16,7 +16,10 @@ public class Client {
             System.exit(-1);
         }
 
-        runMulithreadedClient(args);
+        long before = System.currentTimeMillis();
+        runBasicCheck(args);
+        long after = System.currentTimeMillis();
+//        System.out.printf("Took %s seconds\n", (after - before) / 1000.0);
     }
 
     public static void runBasicCheck(String[] args) {
@@ -49,16 +52,14 @@ public class Client {
         }
     }
 
-    static int numThreads = 2;
+    static int numThreads = 16;
     static int requestsPerThread = 1;
 
-    static int passwordLength = 100;
-    static int passwordsPerRequest = 16;
+    static int passwordLength = 1024;
+    static int passwordsPerRequest = 1;
     static short logRounds = 12;
 
     public static void runMulithreadedClient(String[] args) throws InterruptedException {
-
-
         boolean[][] results = new boolean[numThreads][requestsPerThread];
         Thread[] threads = new Thread[numThreads];
 

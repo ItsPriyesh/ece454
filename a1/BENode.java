@@ -45,10 +45,11 @@ public class BENode {
         log.info("Launching BE node on port " + portBE + " at host " + getHostName());
         BcryptService.Processor processor = new BcryptService.Processor<BcryptService.Iface>(new BcryptServiceHandler());
         TServerSocket socket = new TServerSocket(portBE);
-        TThreadPoolServer.Args sargs = new TThreadPoolServer.Args(socket);
-        sargs.protocolFactory(new TBinaryProtocol.Factory());
-        sargs.transportFactory(new TFramedTransport.Factory());
-        sargs.processorFactory(new TProcessorFactory(processor));
+        TThreadPoolServer.Args sargs = new TThreadPoolServer.Args(socket)
+                .protocolFactory(new TBinaryProtocol.Factory())
+                .inputTransportFactory(new TFramedTransport.Factory())
+                .outputTransportFactory(new TFramedTransport.Factory())
+                .processorFactory(new TProcessorFactory(processor));
         // sargs.maxWorkerThreads(64);
         // TThreadPoolServer creates uses a different thread for each client connection (from a fixed pool of threads)
         // Using TThreadPoolServer is throwing this ERROR org.apache.thrift.server.TThreadPoolServer  - Thrift error occurred during processing of message.

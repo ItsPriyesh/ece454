@@ -23,14 +23,14 @@ public class FEWorkerManager {
             this.host = host;
             this.port = port;
             this.lastHeartbeatTime = time;
-            buildClientConnection();
+            obtainClientConnection();
         }
 
         boolean isBusy() {
             return busy;
         }
 
-        void buildClientConnection() {
+        void obtainClientConnection() {
             transport = new TFramedTransport(new TSocket(host, Integer.parseInt(port)));
             client = new BcryptService.Client(new TBinaryProtocol(transport));
         }
@@ -88,7 +88,7 @@ public class FEWorkerManager {
         } else {
             workers.get(key).lastHeartbeatTime = timestamp;
         }
-        System.out.printf("Current worker pool (%s): %s\n", workers.size(), workers.values());
+        System.out.printf("Current worker pool size = (%s):\n", workers.size());
     }
 
 
@@ -126,7 +126,7 @@ public class FEWorkerManager {
 
         if (worker != null) {
             // Re-create a new client connection to the BE (will spawn another thread on the least loaded BE)
-            worker.buildClientConnection();
+            worker.obtainClientConnection();
         }
 
         return worker;
