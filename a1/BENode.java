@@ -7,10 +7,8 @@ import org.apache.thrift.TProcessorFactory;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.server.TThreadPoolServer;
-import org.apache.thrift.transport.TServerSocket;
-import org.apache.thrift.transport.TFramedTransport;
-import org.apache.thrift.transport.TSocket;
-import org.apache.thrift.transport.TTransport;
+import org.apache.thrift.server.TThreadedSelectorServer;
+import org.apache.thrift.transport.*;
 
 
 public class BENode {
@@ -44,17 +42,17 @@ public class BENode {
         int portBE = Integer.parseInt(args[2]);
         log.info("Launching BE node on port " + portBE + " at host " + getHostName());
         BcryptService.Processor processor = new BcryptService.Processor<BcryptService.Iface>(new BcryptServiceHandler());
-        TServerSocket socket = new TServerSocket(portBE);
-        TThreadPoolServer.Args sargs = new TThreadPoolServer.Args(socket)
+        TNonblockingServerTransport socket = new TNonblockingServerSocket(portBE);
+        TThreadedSelectorServer.Args sargs = new TThreadedSelectorServer.Args(socket)
                 .protocolFactory(new TBinaryProtocol.Factory())
-                .inputTransportFactory(new TFramedTransport.Factory())
-                .outputTransportFactory(new TFramedTransport.Factory())
+                .transportFactory(new TFramedTransport.Factory())
                 .processorFactory(new TProcessorFactory(processor));
         // sargs.maxWorkerThreads(64);
         // TThreadPoolServer creates uses a different thread for each client connection (from a fixed pool of threads)
         // Using TThreadPoolServer is throwing this ERROR org.apache.thrift.server.TThreadPoolServer  - Thrift error occurred during processing of message.
         //org.apache.thrift.transport.TTransportException
-        TThreadPoolServer server = new TThreadPoolServer(sargs);
+//        TThreadedSelectorServer server = new TThreadedSelectorServer(sargs);
+        TThreadedSelectorServer server = new TThreadedSelectorServer(sargs);
         server.serve();
     }
 

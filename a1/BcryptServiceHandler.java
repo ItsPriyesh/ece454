@@ -95,15 +95,18 @@ public class BcryptServiceHandler implements BcryptService.Iface {
         System.out.println(Thread.currentThread().getName() + " FOUND WORKER: " + workerBE);
         while (workerBE != null) {
             // Found a worker! Sending workload to BE
+            workerBE.obtainClientConnection();
             TTransport transportToBE = workerBE.getTransport();
             BcryptService.Client clientToBE = workerBE.getClient();
             try {
                 final int workload = (int) (passwords.size() * Math.pow(2, logRounds));
-                transportToBE.open();
-
                 workerBE.setBusy(true);
                 workerBE.incrementLoad(workload);
+
+                transportToBE.open();
                 List<String> hashes = clientToBE.hashPassword(passwords, logRounds);
+                transportToBE.close();
+
                 workerBE.decrementLoad(workload);
                 workerBE.setBusy(false);
                 System.out.println("Worker replied with hashes " + hashes);
@@ -177,15 +180,18 @@ public class BcryptServiceHandler implements BcryptService.Iface {
         FEWorkerManager.WorkerMetadata workerBE = FEWorkerManager.findAvailableWorker();
         while (workerBE != null) {
             // Found a worker! Sending workload to BE
+            workerBE.obtainClientConnection();
             TTransport transportToBE = workerBE.getTransport();
             BcryptService.Client clientToBE = workerBE.getClient();
             try {
-                transportToBE.open();
                 final int workload = password.size();
-
                 workerBE.setBusy(true);
                 workerBE.incrementLoad(workload);
+
+                transportToBE.open();
                 List<Boolean> checks = clientToBE.checkPassword(password, hash);
+                transportToBE.close();
+
                 workerBE.decrementLoad(workload);
                 workerBE.setBusy(false);
 

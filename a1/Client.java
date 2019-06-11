@@ -17,9 +17,9 @@ public class Client {
         }
 
         long before = System.currentTimeMillis();
-        runBasicCheck(args);
+        runMulithreadedClient(args);
         long after = System.currentTimeMillis();
-//        System.out.printf("Took %s seconds\n", (after - before) / 1000.0);
+        System.out.printf("Took %s seconds\n", (after - before) / 1000.0);
     }
 
     public static void runBasicCheck(String[] args) {
@@ -35,16 +35,16 @@ public class Client {
             List<String> hash = client.hashPassword(password, (short) 10);
             System.out.println("Password: " + password.get(0));
             System.out.println("Hash: " + hash.get(0));
-            System.out.println("Positive check: " + client.checkPassword(password, hash));
-            hash.set(0, "$2a$14$reBHJvwbb0UWqJHLyPTVF.6Ld5sFRirZx/bXMeMmeurJledKYdZmG");
-            System.out.println("Negative check: " + client.checkPassword(password, hash));
-            try {
-                hash.set(0, "too short");
-                List<Boolean> rets = client.checkPassword(password, hash);
-                System.out.println("Exception check: no exception thrown");
-            } catch (Exception e) {
-                System.out.println("Exception check: exception thrown");
-            }
+//            System.out.println("Positive check: " + client.checkPassword(password, hash));
+//            hash.set(0, "$2a$14$reBHJvwbb0UWqJHLyPTVF.6Ld5sFRirZx/bXMeMmeurJledKYdZmG");
+//            System.out.println("Negative check: " + client.checkPassword(password, hash));
+//            try {
+//                hash.set(0, "too short");
+//                List<Boolean> rets = client.checkPassword(password, hash);
+//                System.out.println("Exception check: no exception thrown");
+//            } catch (Exception e) {
+//                System.out.println("Exception check: exception thrown");
+//            }
 
             transport.close();
         } catch (TException x) {

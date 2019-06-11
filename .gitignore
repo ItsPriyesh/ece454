@@ -3,4 +3,5 @@ out/
 *.class
 huge.txt
 gen-java/
+workspace.xml
 
