@@ -146,7 +146,13 @@ public class BcryptServiceHandler implements BcryptService.Iface {
                     final int end = t < threads - 1 ? (t + 1) * passwordsPerThread : numPasswords;
                     executorService.submit(() -> {
                         for (int i = start; i < end; i++) {
-                            result[i] = BCrypt.checkpw(passwords.get(i), hashes.get(i));
+                            boolean check;
+                            try {
+                                check = BCrypt.checkpw(passwords.get(i), hashes.get(i));
+                            } catch (Exception e) {
+                                check = false;
+                            }
+                            result[i] = check;
                         }
                     });
                 }
@@ -158,7 +164,13 @@ public class BcryptServiceHandler implements BcryptService.Iface {
             } else { // run it on a single thread if there's only one password
                 List<Boolean> res = new ArrayList<>(passwords.size());
                 for (int i = 0; i < passwords.size(); i++) {
-                    res.add(BCrypt.checkpw(passwords.get(i), hashes.get(i)));
+                    boolean check;
+                    try {
+                        check = BCrypt.checkpw(passwords.get(i), hashes.get(i));
+                    } catch (Exception e) {
+                        check = false;
+                    }
+                    res.add(check);
                 }
                 System.out.println("finished checking");
                 return res;
