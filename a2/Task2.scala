@@ -6,11 +6,17 @@ object Task2 {
     val conf = new SparkConf().setAppName("Task 2")
     val sc = new SparkContext(conf)
 
-    val textFile = sc.textFile(args(0))
+    val lines = sc.textFile(args(0))
 
     // modify this code
-    val output = textFile.map(x => x);
-    
-    output.saveAsTextFile(args(1))
+    val count = lines
+      .flatMap(_.split(",", -1).tail)
+      .filter(!_.isEmpty)
+      .count()
+
+    // write count to a single file
+    sc.makeRDD(Array(count))
+      .coalesce(1)
+      .saveAsTextFile(args(1))
   }
 }

@@ -10,7 +10,7 @@ object Task1 {
 
     // Convert input RDD[String] to RDD[(movie (rating, userIndex))]
     val rows = lines.flatMap(line => {
-      val cols = line.split(",")
+      val cols = line.split(",", -1)
       val movie = cols.head
       val ratings = cols.tail
       ratings
