@@ -8,7 +8,7 @@ object Task1 {
 
     val lines = sc.textFile(args(0))
 
-    // Converts input to rows of (movie (rating, userIndex))
+    // Convert input RDD[String] to RDD[(movie (rating, userIndex))]
     val rows = lines.flatMap(line => {
       val cols = line.split(",")
       val movie = cols.head
@@ -16,11 +16,15 @@ object Task1 {
       ratings
         .zipWithIndex
         .filter(!_._1.isEmpty)
-        .map { case (rating, idx) => movie -> (rating.toInt, List(idx)) }
+        .map { case (rating, idx) => movie -> (rating.toInt, List(idx + 1)) }
     });
 
     // reduces rows to (move, rating, List(userIndex))
-    val reduced = rows.reduceByKey((acc, i) => if (i._1 >= acc._1) (acc._1, acc._2 ::: i._2) else acc)
+    val reduced = rows.reduceByKey((acc, i) =>
+      if (i._1 > acc._1) i
+      else if (i._1 == acc._1) (acc._1, acc._2 ++ i._2)
+      else acc
+    )
 
     // map to desired output (movie, users)
     val output = reduced.map { case (movie, (_, users)) => movie + "," + users.mkString(",") }

@@ -1,0 +1,4 @@
+#!/bin/sh
+
+ssh -i ~/Desktop/student_p99patel -L 8080:127.0.0.1:3128 p99patel@manta.uwaterloo.ca "rm -rf a2"
+scp -r ~/Desktop/4A/ECE_454/assignments/a2 p99patel@manta.uwaterloo.ca:/home2/p99patel/
