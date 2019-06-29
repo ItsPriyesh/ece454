@@ -9,8 +9,19 @@ object Task3 {
     val textFile = sc.textFile(args(0))
 
     // modify this code
-    val output = textFile.map(x => x);
-    
-    output.saveAsTextFile(args(1))
+    def parseText(line: String): Array[(Int, Int)] = {
+      line.split(",")
+        .zipWithIndex
+        .drop(1)
+        .filter(_._1 != "")
+        .map(pair => (pair._2, 1))
+    }
+
+    val countRatings = lines.flatMap(line => parseText(line))
+      .reduceByKey(_ + _)
+      .map(v => v._1 + "," + v._2)
+
+    countRatings.saveAsTextFile(args(1))
   }
 }
+
