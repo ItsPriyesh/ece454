@@ -1,12 +1,8 @@
 import java.io.*;
 import java.net.URI;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.*;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataOutputStream;
-import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
@@ -24,47 +20,38 @@ public class Task4 {
         Apollo 13,,,4,5,,5
      */
 
+    private static final String DISTRIBUTED_CACHE_LABEL = "cachedInput";
+
     public static class SimilarityMapper extends Mapper<Object, Text, Text, IntWritable> {
 
         private final Text titlePair = new Text();
         private final IntWritable similarity = new IntWritable();
 
-        private final Map<String, String[]> cache = new HashMap<>();
+        private final List<String> cache = new LinkedList<>();
 
         @Override
-        protected void setup(Context context) throws IOException, InterruptedException {
-            final URI cacheFile = context.getCacheFiles()[0];
+        protected void setup(Context context) throws IOException {
+            BufferedReader reader = new BufferedReader(new FileReader(DISTRIBUTED_CACHE_LABEL));
             cache.clear();
-
-            Configuration conf = context.getConfiguration();
-            FileSystem fs = FileSystem.getLocal(conf);
-
             String line;
-            BufferedReader reader = new BufferedReader(new InputStreamReader(fs.open(new Path(cacheFile))));
-
-            while ((line = reader.readLine()) != null) {
-                final String[] tokens = line.split(",", -1);
-                final String title = tokens[0];
-                final String[] users = Arrays.copyOfRange(tokens, 1, tokens.length);
-                cache.put(title, users);
-            }
+            while ((line = reader.readLine()) != null) cache.add(line);
         }
 
         @Override
         protected void map(Object key, Text value, Context context) throws IOException, InterruptedException {
-            final String[] tokens = value.toString().split(",", -1);
-            final String titleA = tokens[0];
-            for (Map.Entry<String, String[]> entry : cache.entrySet()) {
-                final String titleB = entry.getKey();
+            final String[] tokensA = value.toString().split(",", -1);
+            final String titleA = tokensA[0];
+            for (String cacheLine : cache) {
+                final String[] tokensB = cacheLine.split(",", -1);
+                final String titleB = tokensB[0];
 
                 // maintain lexicographic order between titles
                 if (titleA.compareTo(titleB) >= 0) continue;
 
                 int count = 0;
-                final String[] usersB = entry.getValue();
-                for (int i = 0; i < usersB.length; i++) {
-                    String a = tokens[i + 1];
-                    String b = usersB[i];
+                for (int i = 1; i < tokensA.length; i++) {
+                    String a = tokensA[i];
+                    String b = tokensB[i];
                     if (!a.isEmpty() && !b.isEmpty() && a.equals(b)) {
                         count++;
                     }
@@ -85,25 +72,12 @@ public class Task4 {
         Job job = Job.getInstance(conf, "Task4");
         job.setJarByClass(Task4.class);
 
-        // Add the input to the distributed cache so each worker has a cache copy
-//        System.out.println(Arrays.toString(fs.listStatus(new Path(File.separator + "user/p99patel/" ))));
-        Path in = new Path(File.separator + "user/p99patel" + otherArgs[0]);
-
-        FileSystem fs = FileSystem.get(conf);
-//        FSDataOutputStream outputStream = fs.create(in);
-//
-//        BufferedReader reader = new BufferedReader(new FileReader(new File(otherArgs[0])));
-//        String line;
-//        while ((line = reader.readLine()) != null) {
-//            outputStream.writeUTF(line);
-//        }
-
-
-        System.out.println(Arrays.toString(fs.listStatus(new Path(File.separator + "a2_inputs"))));
-
-        job.addCacheFile(in.toUri());
+        // Add the input to the distributed cache so each worker has a local cached copy
+        job.addCacheFile(new URI(otherArgs[0] + "#" + DISTRIBUTED_CACHE_LABEL));
 
         job.setMapperClass(SimilarityMapper.class);
+        job.setMapOutputKeyClass(Text.class);
+        job.setMapOutputValueClass(IntWritable.class);
 
         TextInputFormat.addInputPath(job, new Path(otherArgs[0]));
         TextOutputFormat.setOutputPath(job, new Path(otherArgs[1]));
