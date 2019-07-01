@@ -10,14 +10,15 @@ object Task3 {
 
     // modify this code
     def parseText(line: String): Array[(Int, Int)] = {
-      line.split(",")
+      line.split(",", -1)
         .zipWithIndex
         .drop(1)
-        .filter(_._1 != "")
-        .map(pair => (pair._2, 1))
+        .filter(!_._1.isEmpty)
+        .map { case(_, idx) => (idx, 1) }
     }
 
-    val countRatings = lines.flatMap(line => parseText(line))
+    val countRatings = textFile
+      .flatMap(parseText)
       .reduceByKey(_ + _)
       .map(v => v._1 + "," + v._2)
 

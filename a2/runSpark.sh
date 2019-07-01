@@ -4,7 +4,7 @@ export JAVA_HOME=/usr/lib/jvm/java-8-oracle
 export SCALA_HOME=/usr
 export CLASSPATH=".:/opt/spark-latest/jars/*"
 
-TASK=Task2
+TASK=Task3
 
 echo --- Deleting
 rm $TASK.jar
