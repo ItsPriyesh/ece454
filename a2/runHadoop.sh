@@ -3,7 +3,7 @@
 export JAVA_HOME=/usr/lib/jvm/java-8-oracle
 export CLASSPATH=`hadoop classpath`
 
-TASK=Task1
+TASK=Task4
 
 echo --- Deleting
 rm $TASK.jar
