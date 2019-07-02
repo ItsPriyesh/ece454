@@ -25,6 +25,7 @@ object Task4 {
       .filter { case (titleA, _, titleB, _) => titleA < titleB }
       .map { case (titleA, usersA, titleB, usersB) => s"$titleA,$titleB" -> (usersA, usersB) }
       .aggregateByKey(0)(countSimilarities, _ + _) // TODO: check if this is faster than nested aggregation within the previous map step
+      .map { case (k, v) => s"$k,$v" }
 
     output.saveAsTextFile(args(1))
   }
