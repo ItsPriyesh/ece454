@@ -95,13 +95,10 @@ public class StorageNode {
         public void process(WatchedEvent watchedEvent) throws Exception {
             List<String> nodes = client.getChildren().usingWatcher(this).forPath(zknode);
             handler.setRole(determineRole(nodes));
-
         }
 
         Role determineRole(List<String> nodes) {
-            if (handler.isPrimary()) return Role.PRIMARY;
-
-            if (nodes.size() == 1) {
+            if (handler.isPrimary() || nodes.size() == 1) {
                 return Role.PRIMARY;
             } else if (nodes.size() == 2) {
                 return Role.BACKUP;
