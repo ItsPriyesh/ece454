@@ -4,10 +4,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import org.apache.curator.framework.*;
+import org.apache.curator.framework.api.CuratorWatcher;
 import org.apache.thrift.TException;
+import org.apache.zookeeper.WatchedEvent;
 
 
-public class KeyValueHandler implements KeyValueService.Iface {
+public class KeyValueHandler implements KeyValueService.Iface, CuratorWatcher {
 
     enum Role {
         PRIMARY, BACKUP,
@@ -25,7 +27,7 @@ public class KeyValueHandler implements KeyValueService.Iface {
     private Role role;
     private BackupConnectionPool backupPool;
 
-    public KeyValueHandler(String host, int port, CuratorFramework curClient, String zkNode) {
+    public KeyValueHandler(String host, int port, CuratorFramework curClient, String zkNode) throws Exception {
         this.host = host;
         this.port = port;
         this.curClient = curClient;
@@ -33,6 +35,10 @@ public class KeyValueHandler implements KeyValueService.Iface {
         localMap = new ConcurrentHashMap<>();
         seqMap = new ConcurrentHashMap<>();
         seq = new AtomicInteger();
+
+        curClient.getChildren()
+                .usingWatcher(this)
+                .forPath(zkNode);
     }
 
     @Override
@@ -83,7 +89,9 @@ public class KeyValueHandler implements KeyValueService.Iface {
         return role == Role.PRIMARY;
     }
 
-    public void onServersChanged(List<String> nodes) {
+    @Override
+    public void process(WatchedEvent watchedEvent) throws Exception {
+        List<String> nodes = curClient.getChildren().usingWatcher(this).forPath(zkNode);
         role = determineRole(nodes);
         System.out.printf("set role of %s:%s to %s\n", host, port, role);
 

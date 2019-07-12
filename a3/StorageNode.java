@@ -64,17 +64,5 @@ public class StorageNode {
         curClient.create()
                 .withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
                 .forPath(zknode + "/server-", serverId.getBytes());
-
-        List<String> nodes = curClient.getChildren()
-                .usingWatcher(new CuratorWatcher() {
-                    @Override
-                    public void process(WatchedEvent watchedEvent) throws Exception {
-                        List<String> nodes = curClient.getChildren().usingWatcher(this).forPath(zknode);
-                        handler.onServersChanged(nodes);
-                    }
-                })
-                .forPath(zknode);
-
-        handler.onServersChanged(nodes);
     }
 }
