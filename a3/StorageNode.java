@@ -5,7 +5,6 @@ import org.apache.thrift.*;
 import org.apache.thrift.server.*;
 import org.apache.thrift.transport.*;
 import org.apache.thrift.protocol.*;
-import KeyValueHandler.Role;
 import org.apache.zookeeper.*;
 import org.apache.curator.retry.*;
 import org.apache.curator.framework.*;
@@ -64,48 +63,18 @@ public class StorageNode {
         String serverId = host + ":" + port;
         curClient.create()
                 .withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
-                .forPath(zknode + "/", serverId.getBytes());
+                .forPath(zknode + "/server-", serverId.getBytes());
 
-        StorageNodeListener listener = new StorageNodeListener(curClient, zknode, handler);
         List<String> nodes = curClient.getChildren()
-                .usingWatcher(listener)
+                .usingWatcher(new CuratorWatcher() {
+                    @Override
+                    public void process(WatchedEvent watchedEvent) throws Exception {
+                        List<String> nodes = curClient.getChildren().usingWatcher(this).forPath(zknode);
+                        handler.onServersChanged(nodes);
+                    }
+                })
                 .forPath(zknode);
 
-        handler.setRole(listener.determineRole(nodes));
+        handler.onServersChanged(nodes);
     }
-
-    private static class StorageNodeListener implements CuratorWatcher {
-
-        final CuratorFramework client;
-        final String zknode;
-        final KeyValueHandler handler;
-
-        StorageNodeListener(CuratorFramework client, String zknode, KeyValueHandler handler) {
-            this.client = client;
-            this.zknode = zknode;
-            this.handler = handler;
-        }
-
-        /*
-            The server whose child znode has the smallest name in the
-            lexicographic order is the primary. The other server (if one
-            exists) is the secondary or backup.
-         */
-        @Override
-        public void process(WatchedEvent watchedEvent) throws Exception {
-            List<String> nodes = client.getChildren().usingWatcher(this).forPath(zknode);
-            handler.setRole(determineRole(nodes));
-        }
-
-        Role determineRole(List<String> nodes) {
-            if (handler.isPrimary() || nodes.size() == 1) {
-                return Role.PRIMARY;
-            } else if (nodes.size() == 2) {
-                return Role.BACKUP;
-            } else {
-                throw new IllegalStateException("Number of storage nodes is " + nodes.size());
-            }
-        }
-    }
-
 }
