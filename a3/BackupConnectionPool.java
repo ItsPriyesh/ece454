@@ -5,7 +5,8 @@ import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
 import org.apache.thrift.transport.TTransportException;
 
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 
 public class BackupConnectionPool {
 
@@ -13,12 +14,12 @@ public class BackupConnectionPool {
 
     private final String host;
     private final int port;
-    private final LinkedBlockingQueue<KeyValueService.Client> clients;
+    private final BlockingQueue<KeyValueService.Client> clients;
 
     public BackupConnectionPool(String host, int port) {
         this.host = host;
         this.port = port;
-        clients = new LinkedBlockingQueue<>(POOL_SIZE);
+        clients = new ArrayBlockingQueue<>(POOL_SIZE);
         for (int i = 0; i < POOL_SIZE; i++) {
             try {
                 KeyValueService.Client client = createThriftClient(host, port);
