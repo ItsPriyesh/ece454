@@ -83,13 +83,20 @@ public class KeyValueHandler implements KeyValueService.Iface {
         return role == Role.PRIMARY;
     }
 
-    public void onServersChanged(List<String> servers) {
-        role = determineRole(servers);
+    public void onServersChanged(List<String> nodes) {
+        role = determineRole(nodes);
         System.out.printf("set role of %s:%s to %s\n", host, port, role);
 
-        if (servers.size() > 1) {
-            for (String server : servers) {
-                String[] host = server.split(":");
+        if (nodes.size() > 1) {
+            for (String node : nodes) {
+                byte[] data;
+                try {
+                    data = curClient.getData().forPath(zkNode + "/" + node);
+                } catch (Exception e) {
+                    continue;
+                }
+                String string = new String(data);
+                String[] host = string.split(":");
                 int port = Integer.parseInt(host[1]);
                 if (!host[0].equals(this.host) && port != this.port) {
                     backupPool = new BackupConnectionPool(host[0], port);
@@ -97,7 +104,7 @@ public class KeyValueHandler implements KeyValueService.Iface {
                 }
             }
 
-            if (backupPool != null) {
+            if (isPrimary() && backupPool != null) {
                 // TODO Batch this request, if the map's too big thrift might fail
                 KeyValueService.Client client = null;
                 try {
