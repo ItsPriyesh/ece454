@@ -7,19 +7,23 @@ import org.apache.thrift.transport.TTransportException;
 
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class BackupConnectionPool {
 
     private static final int POOL_SIZE = 16;
+    private static final int MAX_RETRIES = 5;
 
     private final String host;
     private final int port;
     private final BlockingQueue<KeyValueService.Client> clients;
+    private final AtomicInteger recreateRetries;
 
     public BackupConnectionPool(String host, int port) {
         this.host = host;
         this.port = port;
         clients = new ArrayBlockingQueue<>(POOL_SIZE);
+        recreateRetries = new AtomicInteger(0);
         for (int i = 0; i < POOL_SIZE; i++) {
             try {
                 KeyValueService.Client client = createThriftClient(host, port);
@@ -44,8 +48,8 @@ public class BackupConnectionPool {
         }
     }
 
-    // TODO, just destroy the pool if this has been retried too many times
     public KeyValueService.Client recreateClientConnection() throws TTransportException {
+        if (recreateRetries.incrementAndGet() > MAX_RETRIES) return null;
         return createThriftClient(host, port);
     }
 

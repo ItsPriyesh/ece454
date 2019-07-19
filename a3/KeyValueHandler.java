@@ -30,7 +30,7 @@ public class KeyValueHandler implements KeyValueService.Iface, CuratorWatcher {
         this.zkNode = zkNode;
         localMap = new ConcurrentHashMap<>();
         seqMap = new ConcurrentHashMap<>();
-        seq = new AtomicInteger();
+        seq = new AtomicInteger(0);
 
         curClient.getChildren()
                 .usingWatcher(this)
@@ -59,6 +59,8 @@ public class KeyValueHandler implements KeyValueService.Iface, CuratorWatcher {
             } finally {
                 if (client != null) {
                     backupPool.releaseClient(client);
+                } else {
+                    backupPool = null;
                 }
             }
         }
