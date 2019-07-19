@@ -90,7 +90,7 @@ public class KeyValueHandler implements KeyValueService.Iface, CuratorWatcher {
         }
     }
 
-    public boolean isPrimary() {
+    boolean isPrimary() {
         return role == Role.PRIMARY;
     }
 
@@ -99,10 +99,14 @@ public class KeyValueHandler implements KeyValueService.Iface, CuratorWatcher {
         List<String> nodes = curClient.getChildren().usingWatcher(this).forPath(zkNode);
         role = determineRole(nodes);
         System.out.printf("process: set role of %s:%s to %s | nodes=%s, role=%s, backupPool=%s\n", host, port, role, nodes.size(), role, backupPool);
-        if (isPrimary() && nodes.size() > 1) {
-            backupPool = obtainConnectionToBackup(nodes);
-            if (backupPool != null) {
-                copyMapToBackup();
+        if (isPrimary()) {
+            if (nodes.size() > 1) {
+                backupPool = obtainConnectionToBackup(nodes);
+                if (backupPool != null) {
+                    copyMapToBackup();
+                }
+            } else {
+                backupPool = null;
             }
         }
     }
@@ -159,10 +163,6 @@ public class KeyValueHandler implements KeyValueService.Iface, CuratorWatcher {
     }
 
     private KeyValueHandler.Role determineRole(List<String> nodes) {
-        if (isPrimary() || nodes.size() == 1) {
-            return KeyValueHandler.Role.PRIMARY;
-        } else {
-            return KeyValueHandler.Role.BACKUP;
-        }
+        return isPrimary() || nodes.size() == 1 ? Role.PRIMARY : Role.BACKUP;
     }
 }
