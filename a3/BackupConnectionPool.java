@@ -44,6 +44,7 @@ public class BackupConnectionPool {
         }
     }
 
+    // TODO, just destroy the pool if this has been retried too many times
     public KeyValueService.Client recreateClientConnection() throws TTransportException {
         return createThriftClient(host, port);
     }

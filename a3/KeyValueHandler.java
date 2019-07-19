@@ -11,10 +11,6 @@ import org.apache.zookeeper.WatchedEvent;
 
 public class KeyValueHandler implements KeyValueService.Iface, CuratorWatcher {
 
-    enum Role {
-        PRIMARY, BACKUP,
-    }
-
     private final int port;
     private final String host;
     private final String zkNode;
@@ -24,7 +20,7 @@ public class KeyValueHandler implements KeyValueService.Iface, CuratorWatcher {
     private final Map<String, Integer> seqMap;
     private final Map<String, String> localMap;
 
-    private Role role;
+    private boolean isPrimary;
     private BackupConnectionPool backupPool;
 
     public KeyValueHandler(String host, int port, CuratorFramework curClient, String zkNode) throws Exception {
@@ -50,7 +46,7 @@ public class KeyValueHandler implements KeyValueService.Iface, CuratorWatcher {
     @Override
     public void put(String key, String value) throws org.apache.thrift.TException {
         localMap.put(key, value);
-        if (isPrimary() && backupPool != null) {
+        if (isPrimary && backupPool != null) {
             System.out.print("isPrimary and backup exists! forwarding operation to backup\n");
             KeyValueService.Client client = null;
             try {
@@ -90,16 +86,12 @@ public class KeyValueHandler implements KeyValueService.Iface, CuratorWatcher {
         }
     }
 
-    boolean isPrimary() {
-        return role == Role.PRIMARY;
-    }
-
     @Override
     public void process(WatchedEvent watchedEvent) throws Exception {
         List<String> nodes = curClient.getChildren().usingWatcher(this).forPath(zkNode);
-        role = determineRole(nodes);
-        System.out.printf("process: set role of %s:%s to %s | nodes=%s, role=%s, backupPool=%s\n", host, port, role, nodes.size(), role, backupPool);
-        if (isPrimary()) {
+        isPrimary = determineRole(nodes);
+        System.out.printf("process: set role of %s:%s to %s | nodes=%s, backupPool=%s\n", host, port, isPrimary ? "primary" : "backup", nodes.size(), backupPool);
+        if (isPrimary) {
             if (nodes.size() > 1) {
                 backupPool = obtainConnectionToBackup(nodes);
                 if (backupPool != null) {
@@ -140,7 +132,7 @@ public class KeyValueHandler implements KeyValueService.Iface, CuratorWatcher {
     private void copyMapToBackup() {
         if (localMap.isEmpty()) return;
 
-        if (isPrimary() && backupPool != null) {
+        if (isPrimary && backupPool != null) {
             // TODO Batch this request, if the map's too big thrift might fail
             KeyValueService.Client client = null;
             try {
@@ -162,7 +154,10 @@ public class KeyValueHandler implements KeyValueService.Iface, CuratorWatcher {
         }
     }
 
-    private KeyValueHandler.Role determineRole(List<String> nodes) {
-        return isPrimary() || nodes.size() == 1 ? Role.PRIMARY : Role.BACKUP;
+    /**
+     * true => primary, false => backup
+     */
+    private boolean determineRole(List<String> nodes) {
+        return isPrimary || nodes.size() == 1;
     }
 }
