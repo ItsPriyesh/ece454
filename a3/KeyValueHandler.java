@@ -11,6 +11,8 @@ import org.apache.zookeeper.WatchedEvent;
 
 public class KeyValueHandler implements KeyValueService.Iface, CuratorWatcher {
 
+    private static int BACKUP_CHUNK_LENGTH = 300000;
+
     private final int port;
     private final String host;
     private final String zkNode;
@@ -130,28 +132,47 @@ public class KeyValueHandler implements KeyValueService.Iface, CuratorWatcher {
 
         return null;
     }
-
+    
     private void copyMapToBackup() {
         if (localMap.isEmpty()) return;
 
         if (isPrimary && backupPool != null) {
-            // TODO Batch this request, if the map's too big thrift might fail
-            KeyValueService.Client client = null;
-            try {
-                client = backupPool.obtainClient();
-                List<String> keys = new ArrayList<>(localMap.keySet());
-                List<String> values = keys.stream().map(localMap::get).collect(Collectors.toList());
-                System.out.println("backupAll starting, sending " + keys.size());
-                client.backupAll(keys, values);
-                System.out.println("backupAll finished, sent " + keys.size());
-            } catch (Exception e) {
-                // shiet
-                System.out.println("ERROR while copying entire map to backup!");
-                e.printStackTrace();
-            } finally {
-                if (client != null) {
-                    backupPool.releaseClient(client);
+
+            List<String> keys = new ArrayList<>(localMap.keySet());
+            List<String> values = keys.stream().map(localMap::get).collect(Collectors.toList());
+
+            // See TFramedTransport.DEFAULT_MAX_LENGTH
+            if (keys.size() <= BACKUP_CHUNK_LENGTH) {
+                // Small enough to send in one frame
+                invokeBackupAll(0, keys.size(), keys, values);
+            } else {
+                // Send in chunks
+                int chunks = (int) Math.ceil(keys.size() / (double) BACKUP_CHUNK_LENGTH);
+                System.out.println("Sending chunks " + chunks);
+                for (int i = 0; i < chunks; i++) {
+                    int start = i * BACKUP_CHUNK_LENGTH;
+                    int end = i < chunks - 1 ? (i + 1) * BACKUP_CHUNK_LENGTH : keys.size();
+                    System.out.println("sent chunk " + i + " from/to : " + start + " " + end);
+                    invokeBackupAll(start, end, keys, values);
                 }
+            }
+        }
+    }
+
+    private void invokeBackupAll(int start, int end, List<String> keys, List<String> values) {
+        KeyValueService.Client client = null;
+        try {
+            client = backupPool.obtainClient();
+            System.out.println("backupAll starting, sending " + (end - start));
+            client.backupAll(keys.subList(start, end), values.subList(start, end));
+            System.out.println("backupAll finished, sent " + (end - start));
+        } catch (Exception e) {
+            // shiet
+            System.out.println("ERROR while copying entire map to backup!");
+            e.printStackTrace();
+        } finally {
+            if (client != null) {
+                backupPool.releaseClient(client);
             }
         }
     }
