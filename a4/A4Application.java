@@ -135,6 +135,51 @@ public class A4Application {
         // add code here if you need any additional configuration options
 
         StreamsBuilder builder = new StreamsBuilder();
+
+        /*
+          roomCapacity:
+          RoomA,2
+          RoomB,2
+
+          students:
+          Student1,RoomA
+          Student2,RoomA
+
+          roomOccupancy:
+          RoomA,2
+
+         */
+
+        // student -> latest room
+        KTable<String, String> students = builder.table(studentTopic);
+
+        // room -> latest max capacity
+        KTable<String, Long> roomCapacity = builder.<String, String>table(classroomTopic)
+                .mapValues((ValueMapper<String, Long>) Long::valueOf);
+
+        // Current occupancy table: roomID, occupancy
+        KTable<String, Long> roomOccupancy = students
+                .groupBy((student, room) -> KeyValue.pair(room, student))
+                .count();
+
+        KTable<String, String> out = roomOccupancy.outerJoin(roomCapacity,
+                (occupancy, capacity) -> {
+                    System.out.printf("joining on room: occupancy=%s, capacity=%s\n", occupancy, capacity);
+                    if (occupancy != null && capacity != null) { // Room exists for student
+                        return occupancy > capacity ? String.valueOf(occupancy) : "OK";
+                    } else {
+                        return null;
+                    }
+                });
+
+        // TODO: filter out (room, OK) messages when the occupancy or max capacity didnt actually change
+        // ie: dont output OK every time a student gets added to a room that hasn't reached capacity yet
+        out.toStream().filter((key, value) -> {
+            System.out.printf("filter: key=%s, val=%s\n", key, value);
+            return value != null;
+        }).to(outputTopic);
+
+
 //
 //        builder.<String, String>stream(classroomTopic)
 //                .groupByKey()
@@ -144,7 +189,7 @@ public class A4Application {
 //                .to(outputTopic);
 
 
-//        KTable<String, Long> roomMax = builder.<String, String>table(classroomTopic)
+//        KTable<String, Long> roomCapacity = builder.<String, String>table(classroomTopic)
 //                .mapValues((ValueMapper<String, Long>) Long::valueOf);
 
 //        KStream<String, String> students = builder.stream(studentTopic); // StudentId,RoomID
@@ -152,13 +197,9 @@ public class A4Application {
 
 //        Serde<RoomState> roomStateSerde = Serdes.serdeFrom(new RoomStateSerializer(), new RoomStateDeserializer());
 
-        // Current occupancy table: roomID, occupancy
-        KStream<String, String> studentRoomTable = builder.stream(studentTopic);// map: student -> latestRoom
-        KStream<String, String> roomTable = builder.stream(classroomTopic);// map: student -> latestRoom
-
-        roomTable.outerJoin(studentRoomTable.selectKey((student, room) -> room), (max, student) -> {
-
-        }, JoinWindows.of(Duration.ofSeconds(1)));
+//        roomTable.outerJoin(studentRoomTable.selectKey((student, room) -> room), (max, student) -> {
+//
+//        }, JoinWindows.of(Duration.ofSeconds(1)));
 //        students.map((student, room) -> KeyValue.pair(room, student))
 //                .outerJoin(rooms, (student, roomCap) -> {
 //                    if (student == null) return null;
@@ -201,7 +242,7 @@ public class A4Application {
 //                .to(outputTopic);
 //        students
 //                .selectKey((student, room) -> room)
-//                .join(roomMax, StudentCapacity::new)
+//                .join(roomCapacity, StudentCapacity::new)
 //                .groupByKey()
 //                .aggregate(RoomState::new, (key, value, state) -> {
 //                    System.out.printf("aggregate: k=%s, v=%s, state=%s\n", key, value.capacity + " " + value.student, state);
