@@ -8,18 +8,20 @@ import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.common.serialization.Serializer;
 import org.apache.kafka.common.utils.Bytes;
 import org.apache.kafka.streams.KafkaStreams;
+import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.StreamsConfig;
 import org.apache.kafka.streams.kstream.*;
 import org.apache.kafka.streams.processor.StateStore;
 import org.apache.kafka.streams.state.KeyValueStore;
 
+import java.time.Duration;
 import java.util.*;
 
 
 public class A4Application {
 
-   public static class RoomState {
+    public static class RoomState {
 
         long maxCapacity;
 
@@ -37,6 +39,10 @@ public class A4Application {
 
         int currentCapacity() {
             return students.size();
+        }
+
+        boolean contains(String student) {
+            return students.contains(student);
         }
 
         RoomState enter(String student) {
@@ -62,6 +68,7 @@ public class A4Application {
     static class RoomStateSerializer implements Serializer<RoomState> {
 
         private final ObjectMapper mapper = new ObjectMapper();
+
         RoomStateSerializer() {
             mapper.disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
         }
@@ -85,6 +92,7 @@ public class A4Application {
             mapper.disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
 
         }
+
         @Override
         public RoomState deserialize(String s, byte[] bytes) {
             if (Objects.isNull(bytes)) return null;
@@ -136,28 +144,73 @@ public class A4Application {
 //                .to(outputTopic);
 
 
-        KTable<String, Long> roomMax = builder.<String, String>table(classroomTopic)
-                .mapValues((ValueMapper<String, Long>) Long::valueOf);
+//        KTable<String, Long> roomMax = builder.<String, String>table(classroomTopic)
+//                .mapValues((ValueMapper<String, Long>) Long::valueOf);
 
-        KStream<String, String> students = builder.stream(studentTopic);
+//        KStream<String, String> students = builder.stream(studentTopic); // StudentId,RoomID
+//        KStream<String, String> rooms = builder.t(classroomTopic); // RoomId,MaxCapacity
 
-        Serde<RoomState> roomStateSerde = Serdes.serdeFrom(new RoomStateSerializer(), new RoomStateDeserializer());
+//        Serde<RoomState> roomStateSerde = Serdes.serdeFrom(new RoomStateSerializer(), new RoomStateDeserializer());
 
+        // Current occupancy table: roomID, occupancy
+        KStream<String, String> studentRoomTable = builder.stream(studentTopic);// map: student -> latestRoom
+        KStream<String, String> roomTable = builder.stream(classroomTopic);// map: student -> latestRoom
 
-        KTable<String, RoomState> aggregate = students.selectKey((student, room) -> room)
-                .join(roomMax, StudentCapacity::new)
-                .groupByKey()
-                .<RoomState>aggregate(RoomState::new, (key, value, state) -> {
-                    System.out.printf("aggregate: k=%s, v=%s, state=%s\n", key, value.capacity + " " + value.student, state);
-                    return state.enter(value.student);
-                }, Materialized.<String, RoomState, KeyValueStore<Bytes, byte[]>>as("aggregated-stream-store")
-                        .withValueSerde(roomStateSerde));
-//                .aggregate(RoomState::new, (room, studentCapacity, state) ->
-//                        state.enter(studentCapacity.student)
-//                )
+        roomTable.outerJoin(studentRoomTable.selectKey((student, room) -> room), (max, student) -> {
+
+        }, JoinWindows.of(Duration.ofSeconds(1)));
+//        students.map((student, room) -> KeyValue.pair(room, student))
+//                .outerJoin(rooms, (student, roomCap) -> {
+//                    if (student == null) return null;
+//                    return student;
+//                    // whatever stream just emitted is the one with a non-null value
+////                    System.out.printf("joining: student = %s, cap = %s\n", student, roomCap);
+////                    return KeyValue.pair(student, roomCap != null ? Long.valueOf(roomCap) : null);
+//                }, JoinWindows.of(Duration.ofSeconds(1)))
+//                .groupByKey();
+//                .mapValues(KeyValue::toString)
+//                .groupByKey()
+//                .aggregate(RoomState::new, (room, studentOrCapacity, roomState) -> {
+//                    String student = studentOrCapacity.key;
+//                    Long capacity = studentOrCapacity.value;
+//                    // Assert that at least one is non-null
+//                    assert !(student == null && capacity == null);
+//
+//                    if (student != null) { // Student entering the room
+//                        if (roomState.contains(student)) {
+//
+//                        }
+//                    } else { // Room capacity updated
+//
+//                    }
+//                }, Materialized.with(Serdes.String(), roomStateSerde))
+//                .reduce(new Reducer<String>() {
+//                    @Override
+//                    public String apply(String value1, String value2) {
+//                        return value1 + ", " + value2;
+//                    }
+//                })
 //                .toStream()
 //                .to(outputTopic);
 
+
+//        KStream<String, String> rooms = builder.stream(classroomTopic);
+//        students.join(rooms, (l, r) -> l + "/" + r, JoinWindows.of(Duration.ofSeconds(1))).to(outputTopic);
+
+//        builder.stream(classroomTopic).join(builder.stream(studentTopic), (a, b) -> a + " || " + b, JoinWindows.of(Duration.ofSeconds(1)))
+//                .to(outputTopic);
+//        students
+//                .selectKey((student, room) -> room)
+//                .join(roomMax, StudentCapacity::new)
+//                .groupByKey()
+//                .aggregate(RoomState::new, (key, value, state) -> {
+//                    System.out.printf("aggregate: k=%s, v=%s, state=%s\n", key, value.capacity + " " + value.student, state);
+//                    return state.enter(value.student);
+//                }, Materialized.with(Serdes.String(), roomStateSerde))
+//                .toStream()
+//                .to(outputTopic);
+
+//        aggregate.toStream().mapValues(RoomState::toString).to(outputTopic);
 //        rooms.join(students)
 //                .groupByKey()
 //                .aggregate(RoomState::new, (key, value, aggregate) -> null)
