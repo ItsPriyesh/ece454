@@ -18,8 +18,14 @@ public class A4Application {
 
     public static class RoomState {
 
-        long occupancy;
-        long capacity;
+        public RoomState() {
+        }
+
+        public RoomState(long occupancy, long capacity) {
+            this.occupancy = occupancy;
+            this.capacity = capacity;
+            System.out.println("Created RoomState " + toString());
+        }
 
         public void setOccupancy(long occupancy) {
             this.occupancy = occupancy;
@@ -28,6 +34,10 @@ public class A4Application {
         public void setCapacity(long capacity) {
             this.capacity = capacity;
         }
+
+        long occupancy;
+        long capacity;
+
 
         @Override
         public String toString() {
@@ -39,7 +49,8 @@ public class A4Application {
         Long occupancy;
         Long capacity;
 
-        public OccupancyCapacity() {}
+        public OccupancyCapacity() {
+        }
 
         public OccupancyCapacity(Long occupancy, Long capacity) {
             this.occupancy = occupancy;
@@ -187,6 +198,8 @@ public class A4Application {
         Serde<RoomState> roomStateSerde = Serdes.serdeFrom(new RoomStateSerializer(), new RoomStateDeserializer());
         Serde<OccupancyCapacity> occCapSerde = Serdes.serdeFrom(new JacksonSerializer<>(), new JacksonDeserializer<>(OccupancyCapacity.class));
 
+        final RoomState state = new RoomState();
+
         KTable<String, RoomState> c = roomOccupancy
                 .outerJoin(roomCapacity, (occupancy, capacity) -> {
                     System.out.printf("joining on room: occupancy=%s, capacity=%s\n", occupancy, capacity);
@@ -200,28 +213,34 @@ public class A4Application {
                 .toStream()
                 .groupByKey()
                 .aggregate(
-                        RoomState::new, /* zero */
-                        (room, newOccCap, roomState) -> { /* adder */
-                            System.out.printf("aggregate: room=%s, newOccupancy=%s, newCapacity=%s state=%s\n",
-                                    room, newOccCap.occupancy, newOccCap.capacity, roomState);
+                        () -> state, /* zero */
+                        (room, newOccCap, roomState) -> {
+                            System.out.printf("aggregate: room=%s, newOccupancy=%s, newCapacity=%s prevState=%s\n",
+                                    room, newOccCap.occupancy, newOccCap.capacity, roomState.hashCode() + ", " + roomState.capacity + ", " + roomState.occupancy);
+
+                            // TODO: WTF the aggregate state isn't changing?? But it is changing in the output??
+                            // room=roomJ, newOccupancy=1, newCapacity=null state=RoomState{occupancy=0, capacity=0}
+                            // output newCapacity if: newOccupancy > newOccupancy
+                            // output OK if: newOccupancy <=
 
                             final Long occupancy = newOccCap.occupancy;
                             final Long capacity = newOccCap.capacity;
 
                             if (occupancy != null && capacity != null) {
                                 // Room exists for student
-
+                                // OK if prevState is overloaded and this state isnt
+//                                if (occupancy > capacity) return;
+                                roomState.setOccupancy(occupancy);
+                                roomState.setCapacity(capacity);
                             } else if (occupancy != null) {
                                 // Room doesn't exist (occupancy update only)
+                                roomState.setOccupancy(occupancy);
                             } else if (capacity != null) {
 
                                 // Student doesn't exist for room (room capacity update only)
                                 roomState.setCapacity(capacity);
-                            } else {
-
-                                // ???
                             }
-                            return new RoomState();
+                            return roomState;
 //                        },
 //                        (room, oldOccCap, roomState) -> { /* subtractor */
 //                            System.out.printf("aggregate subtract: room=%s, oldOccupancy=%s, oldCapacity=%s state=%s\n",
