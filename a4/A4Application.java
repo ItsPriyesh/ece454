@@ -1,21 +1,16 @@
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import javassist.bytecode.ByteArray;
 import org.apache.kafka.common.errors.SerializationException;
 import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.common.serialization.Serializer;
-import org.apache.kafka.common.utils.Bytes;
 import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.StreamsConfig;
 import org.apache.kafka.streams.kstream.*;
-import org.apache.kafka.streams.processor.StateStore;
-import org.apache.kafka.streams.state.KeyValueStore;
 
-import java.time.Duration;
 import java.util.*;
 
 
@@ -23,45 +18,32 @@ public class A4Application {
 
     public static class RoomState {
 
-        long maxCapacity;
+        long occupancy;
+        long capacity;
 
-        final Set<String> students;
-
-        RoomState() {
-            this.students = new HashSet<>();
-            this.maxCapacity = 0;
+        public void setOccupancy(long occupancy) {
+            this.occupancy = occupancy;
         }
 
-        RoomState(Set<String> students, long maxCapacity) {
-            this.students = students;
-            this.maxCapacity = maxCapacity;
-        }
-
-        int currentCapacity() {
-            return students.size();
-        }
-
-        boolean contains(String student) {
-            return students.contains(student);
-        }
-
-        RoomState enter(String student) {
-            students.add(student);
-            return new RoomState(students, maxCapacity);
-        }
-
-        RoomState exit(String student) {
-            students.remove(student);
-            return new RoomState(students, maxCapacity);
-        }
-
-        RoomState setMaxCapacity(long capacity) {
-            return new RoomState(students, capacity);
+        public void setCapacity(long capacity) {
+            this.capacity = capacity;
         }
 
         @Override
         public String toString() {
-            return String.format("maxCapacity=%s, students=%s", maxCapacity, students.toString());
+            return String.format("RoomState{occupancy=%s, capacity=%s}", occupancy, capacity);
+        }
+    }
+
+    static class OccupancyCapacity {
+        Long occupancy;
+        Long capacity;
+
+        public OccupancyCapacity() {}
+
+        public OccupancyCapacity(Long occupancy, Long capacity) {
+            this.occupancy = occupancy;
+            this.capacity = capacity;
         }
     }
 
@@ -104,16 +86,46 @@ public class A4Application {
         }
     }
 
-    static class StudentCapacity {
-        final String student;
-        final long capacity;
+    static class JacksonSerializer<T> implements Serializer<T> {
+        private final ObjectMapper mapper;
 
-        StudentCapacity(String student, long capacity) {
-            this.student = student;
-            this.capacity = capacity;
+        JacksonSerializer() {
+            this.mapper = new ObjectMapper();
+            this.mapper.disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
+        }
+
+        @Override
+        public byte[] serialize(String s, T t) {
+            if (t == null) return null;
+            try {
+                return mapper.writeValueAsBytes(t);
+            } catch (Exception e) {
+                throw new SerializationException(e);
+            }
         }
     }
 
+    static class JacksonDeserializer<T> implements Deserializer<T> {
+
+        private final Class<T> valueType;
+        private final ObjectMapper mapper;
+
+        JacksonDeserializer(Class<T> valueType) {
+            this.valueType = valueType;
+            this.mapper = new ObjectMapper();
+            this.mapper.disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
+        }
+
+        @Override
+        public T deserialize(String s, byte[] bytes) {
+            if (bytes == null) return null;
+            try {
+                return mapper.treeToValue(mapper.readTree(bytes), valueType);
+            } catch (Exception e) {
+                throw new SerializationException(e);
+            }
+        }
+    }
 
     public static void main(String[] args) throws Exception {
         // do not modify the structure of the command line
@@ -162,22 +174,68 @@ public class A4Application {
                 .groupBy((student, room) -> KeyValue.pair(room, student))
                 .count();
 
-        KTable<String, String> out = roomOccupancy.outerJoin(roomCapacity,
-                (occupancy, capacity) -> {
+//        KTable<String, String> out = roomOccupancy.outerJoin(roomCapacity,
+//                (occupancy, capacity) -> {
+//                    System.out.printf("joining on room: occupancy=%s, capacity=%s\n", occupancy, capacity);
+//                    if (occupancy != null && capacity != null) { // Room exists for student
+//                        return occupancy > capacity ? String.valueOf(occupancy) : "OK";
+//                    } else {
+//                        return null;
+//                    }
+//                });
+
+        Serde<RoomState> roomStateSerde = Serdes.serdeFrom(new RoomStateSerializer(), new RoomStateDeserializer());
+        Serde<OccupancyCapacity> occCapSerde = Serdes.serdeFrom(new JacksonSerializer<>(), new JacksonDeserializer<>(OccupancyCapacity.class));
+
+        KTable<String, RoomState> c = roomOccupancy
+                .outerJoin(roomCapacity, (occupancy, capacity) -> {
                     System.out.printf("joining on room: occupancy=%s, capacity=%s\n", occupancy, capacity);
-                    if (occupancy != null && capacity != null) { // Room exists for student
-                        return occupancy > capacity ? String.valueOf(occupancy) : "OK";
-                    } else {
-                        return null;
-                    }
-                });
+                    return new OccupancyCapacity(occupancy, capacity);
+//                    if (occupancy != null && capacity != null) { // Room exists for student
+//                        return occupancy > capacity ? String.valueOf(occupancy) : "OK";
+//                    } else {
+//                        return null;
+//                    }
+                }, Materialized.with(Serdes.String(), occCapSerde))
+                .toStream()
+                .groupByKey()
+                .aggregate(
+                        RoomState::new, /* zero */
+                        (room, newOccCap, roomState) -> { /* adder */
+                            System.out.printf("aggregate: room=%s, newOccupancy=%s, newCapacity=%s state=%s\n",
+                                    room, newOccCap.occupancy, newOccCap.capacity, roomState);
+
+                            final Long occupancy = newOccCap.occupancy;
+                            final Long capacity = newOccCap.capacity;
+
+                            if (occupancy != null && capacity != null) {
+                                // Room exists for student
+
+                            } else if (occupancy != null) {
+                                // Room doesn't exist (occupancy update only)
+                            } else if (capacity != null) {
+
+                                // Student doesn't exist for room (room capacity update only)
+                                roomState.setCapacity(capacity);
+                            } else {
+
+                                // ???
+                            }
+                            return new RoomState();
+//                        },
+//                        (room, oldOccCap, roomState) -> { /* subtractor */
+//                            System.out.printf("aggregate subtract: room=%s, oldOccupancy=%s, oldCapacity=%s state=%s\n",
+//                                    room, oldOccCap.occupancy, oldOccCap.capacity, roomState);
+//                            return new RoomState();
+                        },
+                        Materialized.with(Serdes.String(), roomStateSerde)
+                );
+
 
         // TODO: filter out (room, OK) messages when the occupancy or max capacity didnt actually change
         // ie: dont output OK every time a student gets added to a room that hasn't reached capacity yet
-        out.toStream().filter((key, value) -> {
-            System.out.printf("filter: key=%s, val=%s\n", key, value);
-            return value != null;
-        }).to(outputTopic);
+        // Maybe aggregate by room to hold state of last occupancy
+        c.toStream().mapValues(RoomState::toString).filter((key, value) -> value != null).to(outputTopic);
 
 
 //
